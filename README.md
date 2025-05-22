@@ -1,99 +1,81 @@
-WITH user_fixed AS (
-  SELECT
-    id,  -- Primary‑key user ID
+# Customer Behavior Analysis - SQL Solutions
 
-    /* Construct “Title Case” full name; fallback to 'None' if both
-       first_name and last_name are NULL                          */
-    COALESCE(
-      CONCAT(
-        UPPER(LEFT(first_name, 1)),      -- First initial uppercase
-        LOWER(SUBSTRING(first_name, 2)), -- rest of first name
-        ' ',
-        UPPER(LEFT(last_name, 1)),       -- Last initial uppercase
-        LOWER(SUBSTRING(last_name, 2))   -- rest of last name
-      ),
-      'None'
-    ) AS name,
+## Overview
 
-    DATE(date_joined) AS date_joined,    -- Strip time component
+This project contains SQL-based solutions to analyze customer behavior on a financial platform. It covers two key business scenarios:
 
-    /* Tenure (full months) from join date to a fixed “as‑of” date */
-    TIMESTAMPDIFF(
-      MONTH,
-      date_joined,
-      (SELECT DATE(MAX(date_joined)) FROM users_customuser)
-    ) AS tenure_months
-  FROM users_customuser
-),
+1. **High-Value Customers with Multiple Products**
+2. **Transaction Frequency Analysis**
 
--- ------------------------------------------------------------
--- Step 2: Aggregate savings transactions by user + plan
--- ------------------------------------------------------------
-savings_fixed AS (
-  SELECT
-    owner_id,                               -- User ID
-    COUNT(transaction_date) AS total_deposits,   -- # of deposits
+These insights help the business with strategic decisions in **cross-selling**, **user segmentation**, and **customer engagement**.
 
-    /* Example profit proxy:
-       0.1 % (0.001) of amount, then divide by 100 to convert
-       to base currency units (adjust as needed).                 */
-    AVG(0.001 * confirmed_amount) / 100  AS avg_profit_per_transaction_sav
-  FROM savings_savingsaccount
-  GROUP BY owner_id, plan_id               -- One row per user‑plan
-),
+---
 
--- ------------------------------------------------------------
--- Step 3: Aggregate withdrawal transactions by user + plan
--- ------------------------------------------------------------
-with_fixed AS (
-  SELECT
-    owner_id,                               -- User ID
-    COUNT(transaction_date) AS total_with,  -- # of withdrawals
+## Problem 1: High-Value Customers with Multiple Products
 
-    /* Profit proxy for withdrawals (same 0.1 % logic).           */
-    ((AVG(0.001 * amount_withdrawn)) / 100) AS avg_profit_per_transaction_with
-  FROM withdrawals_withdrawal
-  GROUP BY owner_id, plan_id               -- One row per user‑plan
-)
+**Objective**: Identify customers who have both at least one *funded savings plan* and one *funded investment plan*, sorted by their total deposits (converted from kobo to naira).
 
--- ------------------------------------------------------------
--- Step 4: Combine everything and compute CLV
--- ------------------------------------------------------------
-SELECT
-  u.id,
-  u.name,
-  u.date_joined,
-  u.tenure_months,
+### ✅ Final Output Includes:
+- `owner_id`
+- `name`
+- `savings_count`
+- `investment_count`
+- `total_deposits`
 
-  /* Total # transactions = deposits + withdrawals                */
-  SUM(
-    COALESCE(s.total_deposits, 0) +
-    COALESCE(w.total_with, 0)
-  ) AS total_transactions,
+### 🧠 Logic Summary:
+- Extract only funded savings and investment plans.
+- Link deposit amounts to the respective plans.
+- Ensure users have **at least one** of each product type.
+- Aggregate deposits and sort descending by total.
 
-  /* ------------------------------------------------------------
-     Estimated CLV formula:
-       (total_transactions)            → freq so far
-       × 12                            → annualize
-       × average(profit per txn)       → blended margin
-     ------------------------------------------------------------ */
-  COALESCE(ROUND(((
-    SUM(
-      COALESCE(s.total_deposits, 0) +
-      COALESCE(w.total_with, 0)) / u.tenure_months)
-    * 12
-    * ROUND(
-        AVG(
-          ( COALESCE(s.avg_profit_per_transaction_sav,  0)
-          + COALESCE(w.avg_profit_per_transaction_with, 0)
-          ) / 2                       -- Blend savings & withdrawals
-        ),
-        2                             
-      )
-  ), 2), 0) AS estimated_clv             -- keep 2‑decimal precision
+### ⚠️ Challenges:
+- **Multiple columns for plan types** (`is_regular_savings`, `is_a_fund`) had to be handled carefully.
+- **Null name values** were returned in early queries due to unmatched joins or user data issues.
+- **Overcounting** plans without deposits was resolved by applying filters at the CTE level.
+- **Inconsistent row counts** (192 vs. 179) occurred when comparing two approaches; the final version merges their strengths to produce accurate results.
 
-FROM user_fixed u
-LEFT JOIN savings_fixed s ON u.id = s.owner_id   -- may be NULL
-LEFT JOIN with_fixed w ON u.id = w.owner_id   -- may be NULL
-GROUP BY u.id, u.name, u.date_joined, u.tenure_months  -- non‑aggregated cols
-ORDER BY estimated_clv DESC
+---
+
+## Problem 2: Transaction Frequency Analysis
+
+**Objective**: Segment users into frequency categories based on their **average number of transactions per month**.
+
+### ✅ Final Output Includes:
+- `frequency_category` ("High Frequency", "Medium Frequency", "Low Frequency")
+- `customer_count`
+- `avg_transactions_per_month`
+
+### 🧠 Logic Summary:
+- Count daily transactions per user.
+- Aggregate to get monthly average transactions per user.
+- Categorize:
+  - **High Frequency**: ≥10 txns/month
+  - **Medium Frequency**: 3–9 txns/month
+  - **Low Frequency**: ≤2 txns/month
+- Summarize the total customers and average per category.
+
+### ⚠️ Challenges:
+- Original attempts referenced a non-existent `created_at` column.
+- Correct timestamp field was identified as `transaction_date` from `savings_savingsaccount`.
+- Filtering out zero-amount or null-date transactions was essential for accurate counts.
+- Needed to multiply average **daily** transactions by 30 to approximate monthly frequency.
+
+---
+
+## Technologies Used
+
+- MySQL 8.x
+- SQL CTEs and Aggregate Functions
+- Joins and Conditional Aggregations
+
+---
+
+## Author
+
+**Analyst**: [Yazid Ohiare]  
+**Date**: May 2025  
+**Organization**: Internal Analytics Team / Adashi Staging Environment
+
+---
+
+
