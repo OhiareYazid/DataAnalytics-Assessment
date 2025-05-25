@@ -2,10 +2,12 @@
 
 ## Overview
 
-This project contains SQL-based solutions to analyze customer behavior on a financial platform. It covers two key business scenarios:
+This project contains SQL-based solutions to analyze customer behavior on a financial platform. It covers 4 key business scenarios:
 
 1. **High-Value Customers with Multiple Products**
 2. **Transaction Frequency Analysis**
+3. **Inactive accounts (>/ 1 year)**
+4. **Estimated Customer Lifetime Value (CLV)**
 
 These insights help the business with strategic decisions in **cross-selling**, **user segmentation**, and **customer engagement**.
 
@@ -61,6 +63,34 @@ These insights help the business with strategic decisions in **cross-selling**, 
 - Needed to multiply average **daily** transactions by 30 to approximate monthly frequency.
 
 ---
+## Problem 3  – Inactive Accounts (≥1 Year)**
+✅ Problem
+Identify all plans with no inflow transactions for over 365 days.
+
+⚙️ Approach
+Created type column: Savings or Investment
+Calculated last_transaction_date per plan
+Calculated inactivity_days using DATEDIFF()
+Filtered for inactivity_days >= 365
+
+## ❓ Problem 4 Estimated Customer Lifetime Value (CLV)**
+✅ Problem
+Estimate CLV for all users using:
+
+CLV = (total_transactions / tenure) * 12 * avg_profit_per_transaction
+⚙️ Approach
+Calculated tenure in months from date_joined
+Combined inflow + withdrawal transactions
+Converted amounts from Kobo to Naira
+Estimated CLV and sorted by highest to lowest
+📊 Result
+Final result is a table of 1867 users with:
+
+id
+full name
+date_joined
+tenure (months)
+estimated CLV (Naira)
 
 ## Technologies Used
 
